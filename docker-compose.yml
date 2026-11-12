@@ -1,0 +1,22 @@
+services:
+  db:
+    image: postgres:17
+    container_name: material-register-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: materials
+      POSTGRES_PASSWORD: materials
+      POSTGRES_DB: material_register
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U materials -d material_register" ]
+      interval: 1m30s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  pgdata:
