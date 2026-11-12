@@ -4,8 +4,6 @@ A full stack app for maintenance planners to search, filter, sort and page throu
 catalogue of materials (spare parts, consumables, raw materials and tools), for example
 "all active SKF bearings at the Brisbane plant".
 
-Built for the Lexin Solutions take-home assessment, **The Pragmatist**
-(AI-Native Full Stack Engineer).
 
 > **Status: in progress.** This README will be replaced with the full version
 > (architecture, trade-offs, performance results and AI notes) when the build is complete.
