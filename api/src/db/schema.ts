@@ -68,5 +68,10 @@ export const materials = pgTable(
     index("materials_description_idx").on(table.description),
     index("materials_unit_price_idx").on(table.unitPrice),
     index("materials_stock_qty_idx").on(table.stockQty),
+    // Trigram GIN indexes let ILIKE '%term%' skip the full table scan (R7.1).
+    // B-tree cannot help a leading wildcard; pg_trgm is enabled in migration 0002.
+    index("materials_material_number_trgm_idx").using("gin", table.materialNumber.op("gin_trgm_ops")),
+    index("materials_description_trgm_idx").using("gin", table.description.op("gin_trgm_ops")),
+    index("materials_mpn_trgm_idx").using("gin", table.mpn.op("gin_trgm_ops")),
   ],
 );

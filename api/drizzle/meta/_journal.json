@@ -15,6 +15,20 @@
       "when": 1794534957557,
       "tag": "0001_first_colonel_america",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794555382786,
+      "tag": "0002_enable_pg_trgm",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794555392659,
+      "tag": "0003_yellow_hemingway",
+      "breakpoints": true
     }
   ]
 }

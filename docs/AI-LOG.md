@@ -205,3 +205,102 @@ and 500s leaked SQL and a stack trace. The human chose **Error formatter**. Chai
   `.output()`: the response was a 500 with the generic message and `issues:null` -> spec-reviewer **APPROVE**.
 
 **What the human corrected:** they picked the scope (error formatter) after the main thread pointed out that R5 was already met.
+
+---
+
+## Phase 5: UI states (R6.1–R6.3), 2026-11-13
+
+**Plan:** front-end only. Chain: frontend-engineer -> qa-tester -> spec-reviewer.
+
+**What each agent did**
+- **frontend-engineer:**
+  - New `table-states.tsx` with two components:
+    - `TableError`: a red Alert with a title, an icon and a "Try again" button that calls `refetch`.
+    - `TableEmpty`: an icon with "No materials match" and a Clear button, shown only when filters are active.
+  - `materials.tsx` checks error, then empty, then table.
+  - `placeholderEmpty` fixes a "No materials yet" flash after Clear all from `?q=zzzzzz`.
+  - A friendly network message is shown when `error.data` is undefined (no server reply).
+  - An inline "Could not refresh" note shows when a background refetch fails.
+  - It confirmed the behaviour of `keepPreviousData` and the retry timing in the TanStack source: the default 3 retries take about 7 s before the Alert.
+- **qa-tester:** the first run was cut short when **the disk filled (ENOSPC)**. The code review, the library-source checks and the 10 state traces had
+  passed; the build failed partway with ENOSPC. On the second run, free space was below the brief's 1 GB limit, so it ran nothing.
+  On the third run (the human said continue at about 540 MiB), the code side passed, but **the Postgres container was gone**,
+  probably removed during the human's disk clean-up (the container's logs were lost with it, so this cannot be confirmed). The volume was intact.
+  The main thread restarted Docker Desktop and ran `docker compose up -d` (no `-v`). Data intact: 20000 / 8 / 59, 2 migrations.
+  The fourth run was **PASS**: `q=zzzzzz` gives total 0, regressions pass, and all 96 plant x type x status combinations have rows,
+  so filters alone can never produce an empty result with this seed.
+- **spec-reviewer:** **APPROVE**, nothing blocking. All three additions were judged worth their lines.
+  Suggestions: fix the stale comment at `materials-table.tsx:55`; stop skeleton rows rendering at 60% opacity during `placeholderEmpty`; and set `retry: 1`
+  in `root.tsx`, so the error Alert appears after about 1 s instead of about 7 s (the human's call).
+
+**Process note:** Phase 5 was committed and pushed by the human (`724f74e "add Loading, empty, error states"`)
+while QA was still in progress and before spec review. The commit message has no requirement IDs. History was not rewritten.
+
+**What the human corrected:** they freed disk space twice and chose to continue at low disk. No code corrections.
+
+---
+
+## Phase 6: Faster search with pg_trgm (R7.1), 2026-11-13
+
+**Plan:** API and DB only. Chain: backend-engineer -> qa-tester -> spec-reviewer. The measurement method follows CLAUDE.md Section 12.
+
+**What each agent did**
+- **backend-engineer:** wrote the custom migration `0002_enable_pg_trgm.sql` (`CREATE EXTENSION IF NOT EXISTS pg_trgm`) and the generated
+  `0003_yellow_hemingway.sql`, which adds 3 GIN `gin_trgm_ops` indexes on material_number, description and mpn. It read the SQL before migrating.
+  It measured with `EXPLAIN (ANALYZE, BUFFERS)`, taking the median of 3 runs after ANALYZE, on the SQL the router generates.
+- **qa-tester:** **PASS**. Its independent AFTER numbers match, and every plan matches the engineer's report. Counts are identical with a forced seq scan
+  (including literal `%` and `_`). The checksum is identical to Phase 1 after 4 re-seeds.
+  **It found a wrong number:** the engineer reported the trgm indexes as 2872 kB. On the README path (migrate, then seed with batched inserts) they
+  are about **14 MB** (4680 + 5464 + 4328 kB), about 5.7 times the 2536 kB table. The size depends on how the data was loaded: `CREATE INDEX` over existing
+  data is compact, while filling the index row by row makes it much larger.
+- **spec-reviewer:** **APPROVE**, nothing blocking. The index size needs a documentation fix only; do not add REINDEX to the seed.
+  An optional comment tweak was also suggested: "3+ characters".
+
+**Results for the README** (20,000 rows, Postgres 17; median of 3; engineer's numbers, QA's AFTER in brackets)
+
+| Query (router SQL) | Before | After | Speed-up |
+|---|---|---|---|
+| count `bearing` (1024 rows) | 38.9 ms, Seq Scan | 2.6 ms [3.1], BitmapOr of 3 trgm | ~15x |
+| page `bearing`, LIMIT 25 by material_number | 1.12 ms | 1.12 ms, walks the B-tree in order (cheaper for a common term) | 1x |
+| count MPN `T98R` (6 rows) | 40.7 ms | 0.19 ms [0.19] | ~210x |
+| count `004321` (1 row) | 39.4 ms | 0.19 ms [0.20] | ~200x |
+| count `be` (2 chars) | 35.8 ms | 35.4 ms, still Seq Scan (no trigram) | 1x |
+| count bearing + Active + plant 1 | 4.4 ms | 4.5 ms [5.0], `plant_id_idx` + filter | 1x |
+
+The page query for a rare term (`T98R`) does switch to trgm: 0.20 ms.
+Table 2536 kB; trgm indexes about 14 MB on the README path (2.9 MB if built after the data was loaded).
+Seed time is about 2.0 s without the indexes and 2.45 s with them (writes about 25% slower).
+
+**What the human corrected:** nothing. The wrong size figure was caught by QA, not the human.
+
+---
+
+## Phase 7: README and handover (R8.1–R8.3, R7.1 results), 2026-11-13
+
+**Plan:** the human asked for the README. No engineer agent owns docs, so the **main thread wrote `README.md`** from
+`docs/README-TEMPLATE.md`, using this log and the agents' reports. Chain: main thread -> qa-tester -> spec-reviewer.
+
+**What each agent did**
+- **main thread:** wrote every template section: Quick start, Features with requirement IDs, Architecture,
+  Decisions and trade-offs, Faster search (the Phase 6 table), What I would do next, and How I used AI tools.
+- **qa-tester:** **PASS**. It ran the Quick start against a **brand-new throwaway Postgres 17** (`docker run`, port 5434,
+  anonymous volume, removed afterwards; the human's container on 5433 was not touched).
+  - Results: 4 migrations, pg_trgm 1.6, 13 indexes, 20000/8/59 rows, and a checksum `ccc45f900b1faede1cd6397e1a546b90`
+    identical to Phase 1. The API on that database returned 1024 / 88 / 20000.
+  - Fresh-path index sizes: material_number_trgm 4680 kB, description_trgm 5464 kB, mpn_trgm 3472 kB, which is 13.3 MiB in total
+    (about 5.4x the 2536 kB table). The size varies from run to run when the indexes are filled row by row.
+  - Fact checks against the code passed. It asked for 6 wording fixes, all applied by the main thread:
+    - the size range is now 13–14 MB;
+    - T98R is now ~210x;
+    - the int4 500 is credited to review;
+    - the container loss is worded as "probably";
+    - the fresh-database check moved from "next" to done;
+    - the review catches (.nvmrc, R1.3) were added.
+  - For reference, the Phase 6 QA EXPLAIN for the `bearing` page query showed 434 rows removed and 26 kept,
+    so about 460 rows were read before LIMIT 25 was met.
+- **spec-reviewer:** **APPROVE**, nothing blocking in the README. Conditions: commit the R7 migrations together with the README
+  (otherwise a fresh clone gets no trigram indexes); do not stage `.DS_Store`; add this Phase 7 entry.
+  Suggestions applied: "five places" instead of "five-file", and "Intended workflow". Not applied (optional): shorten the
+  repeated CORS / int4 / NUL stories between Decisions and the AI section.
+
+**What the human corrected:** nothing yet.
