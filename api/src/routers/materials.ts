@@ -13,6 +13,9 @@ import { publicProcedure, router } from "../trpc.ts";
 // Caps each filter list so one request cannot send an unbounded IN (...) list.
 const MAX_FILTER_VALUES = 50;
 
+// plant_id is a Postgres int4; a larger id would fail in SQL (500) instead of in Zod (400).
+const PG_INT_MAX = 2_147_483_647;
+
 // The only columns a client may sort by; user text never reaches ORDER BY.
 const sortColumns = {
   materialNumber: materials.materialNumber,
@@ -27,10 +30,16 @@ const sortKeys = Object.keys(sortColumns) as [SortKey, ...SortKey[]];
 
 const listInput = z
   .object({
-    search: z.string().trim().max(100).default(""),
+    // Postgres text cannot store NUL (22021 -> 500), so drop it first; trim and max then see the clean string.
+    search: z
+      .string()
+      .overwrite((s) => s.replaceAll("\u0000", ""))
+      .trim()
+      .max(100)
+      .default(""),
     types: z.array(z.enum(materialTypeEnum.enumValues)).max(MAX_FILTER_VALUES).default([]),
     statuses: z.array(z.enum(materialStatusEnum.enumValues)).max(MAX_FILTER_VALUES).default([]),
-    plantIds: z.array(z.number().int().positive()).max(MAX_FILTER_VALUES).default([]),
+    plantIds: z.array(z.number().int().positive().max(PG_INT_MAX)).max(MAX_FILTER_VALUES).default([]),
     sortBy: z.enum(sortKeys).default("materialNumber"),
     sortDir: z.enum(["asc", "desc"]).default("asc"),
     page: z.number().int().min(1).default(1),

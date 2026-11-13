@@ -65,5 +65,8 @@ export const materials = pgTable(
     index("materials_plant_id_idx").on(table.plantId),
     index("materials_manufacturer_id_idx").on(table.manufacturerId),
     index("materials_updated_at_idx").on(table.updatedAt),
+    index("materials_description_idx").on(table.description),
+    index("materials_unit_price_idx").on(table.unitPrice),
+    index("materials_stock_qty_idx").on(table.stockQty),
   ],
 );

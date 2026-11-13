@@ -16,8 +16,10 @@ for (const name of ["DATABASE_URL", "WEB_ORIGIN"]) {
 
 const app = express();
 
-// Only the web app may call the API from a browser.
-app.use(cors({ origin: webOrigin }));
+// An array makes cors compare the request Origin and echo it only on a match;
+// a plain string is sent back to every origin, so nothing would be blocked.
+// The `false` branch never runs (startup exits without WEB_ORIGIN); it only narrows the type.
+app.use(cors({ origin: webOrigin ? [webOrigin] : false }));
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
