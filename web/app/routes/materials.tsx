@@ -1,9 +1,11 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Container, Group, Loader, Pagination, Paper, Stack, Text, Title } from "@mantine/core";
+import { useDebouncedValue } from "@mantine/hooks";
 
 import type { Route } from "./+types/materials";
+import { MaterialFilters } from "../components/material-filters";
 import { MaterialsTable } from "../components/materials-table";
 import { formatNumber } from "../lib/format";
 import { useTRPC, type RouterOutputs } from "../lib/trpc";
@@ -32,6 +34,35 @@ export default function MaterialsPage() {
     setSearchParams(toSearchParams(next), { replace: options?.replace });
   };
 
+  // The box keeps its own text so typing is instant; the URL only gets the settled, trimmed value.
+  const [searchText, setSearchText] = useState(state.search);
+  const [debouncedSearch] = useDebouncedValue(searchText.trim(), 300);
+
+  // Push typing to the URL once it has settled. This runs only when the debounced value changes,
+  // so Back/Forward (which change the URL, not the debounced value) can never trigger a write here.
+  // The box re-sync below then feeds the URL value through the debounce, which matches the URL and is skipped.
+  // The searchText check guards the rare case where a pending timer fires in the same render as that re-sync.
+  // replace: true so each search does not add a history entry; update() resets to page 1.
+  useEffect(() => {
+    if (debouncedSearch !== state.search && debouncedSearch === searchText.trim()) {
+      update({ search: debouncedSearch }, { replace: true });
+    }
+    // Only a new debounced value should write. state, searchText and update come from the render
+    // where it changed, so they are current even though they are not deps.
+  }, [debouncedSearch]);
+
+  // Sync the box when the URL changes from outside (Back/Forward, a pasted link). Skip it when the
+  // box already matches after trimming, so a trailing space mid-typing ("bearing ") is not eaten.
+  useEffect(() => {
+    setSearchText((current) => (current.trim() === state.search ? current : state.search));
+  }, [state.search]);
+
+  // Clearing is a deliberate action, so write the URL now instead of waiting for the debounce.
+  const clearSearch = () => {
+    setSearchText("");
+    if (state.search !== "") update({ search: "" }, { replace: true });
+  };
+
   // staleTime (30s) is set globally on the QueryClient in root.tsx.
   // keepPreviousData keeps the old page on screen while the next one loads, so the table never flashes.
   const { data, isPending, isError, isFetching, isPlaceholderData, error } = useQuery(
@@ -56,6 +87,12 @@ export default function MaterialsPage() {
           <Title order={2}>Material Register</Title>
           <Text c="dimmed">Search, filter and sort the material catalogue.</Text>
         </div>
+
+        <MaterialFilters
+          search={searchText}
+          onSearchChange={setSearchText}
+          onSearchClear={clearSearch}
+        />
 
         {/* Minimal for now; the full error and empty states are Phase 5 (R6.1 to R6.3). */}
         {isError && !data ? (

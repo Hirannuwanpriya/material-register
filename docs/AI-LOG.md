@@ -76,3 +76,81 @@ Scope: `api/src/db/schema.ts`, new `api/src/db/seed.ts`, generated `api/drizzle/
 **What the human corrected:** nothing yet. The R1.3 sort index decision is pending.
 
 **Not committed.**
+
+---
+
+## Phase 2: List API + Phase 3: Table, pagination, sorting, URL state, 2026-11-13
+
+Requirements: R2.1–R2.3, R3.1, R3.2, R4.1, R4.2, R5.1–R5.3, R6.4. The human also asked for an R1.3 follow-up (sort indexes) and the CORS fix.
+
+**Plan:** the human asked for `routers/materials.ts`, then `routers/plants.ts`, then "R3" on the front end.
+The main thread pointed out that `web/` had no table or URL state yet. The human chose **strict phase order**: Phase 3 first,
+then search (R3.3) after. Each piece went through engineer -> qa-tester, with one combined spec review.
+
+**What each agent did**
+- **backend-engineer (materials.list):** Zod input with caps (search 100, filter lists 50, pageSize 10–100).
+  `escapeLike` for `%`/`_`/`\`, `and()` of optional conditions, a sort allow-list with `asc(id)` as tie-breaker,
+  LIMIT/OFFSET, and `Promise.all` for the page plus `$count`. Its own decisions: `pageCount` is at least 1; `.prefault({})` (Zod v4);
+  the sortBy enum is built from the allow-list keys.
+- **backend-engineer (plants.list):** 8 plants ordered by code, with no `.input()` because it takes none.
+- **qa-tester:** plants.list PASS (6/6). materials.list: every count matched psql, but **FAIL on CORS**.
+  `cors({ origin: "<string>" })` sends that origin back to every requester.
+- **Human decisions:** fix CORS; add **sort indexes (option A)** on description, unit_price and stock_qty;
+  Phase 3 before search.
+- **backend-engineer:** set CORS to `origin: [webOrigin]`, with a type-narrowing ternary. Migration
+  `0001_first_colonel_america.sql` adds 3 B-tree indexes (176 / 464 / 192 kB). Sorts now use an index scan (0.15–1.1 ms).
+  qa-tester PASS.
+- **frontend-engineer (Phase 3):**
+  - `table-state.ts` covers the full URL contract (q, type, status, plant, sort, dir, page) with defensive parsing.
+  - `format.ts` holds the en-AU formatters.
+  - `MaterialsTable` has the 9 columns, a `SortableTh` with `aria-sort`, skeleton rows, and 60% opacity while refetching.
+  - The page handles pagination, the result count, and a past-last-page jump with `replace: true`.
+  - No search or filter UI, and the empty/error states are minimal, by design.
+  - qa-tester PASS, without a browser.
+- **spec-reviewer:** **CHANGES NEEDED**. `plantIds:[3000000000]` returned **500 and leaked SQL**, because plant_id is int4.
+  Both the API and the URL parser were affected.
+  -> backend-engineer added `PG_INT_MAX`, and frontend-engineer added `MAX_PLANT_ID` -> qa-tester **FAIL**.
+  QA's wider sweep found a second 500: **a NUL byte in the search** (Postgres 22021), also reachable from `?q=`.
+  -> backend-engineer strips NUL with `.overwrite()` before trim and max, and frontend-engineer strips NUL from `q`
+  -> qa-tester **PASS** (67 unusual inputs, 0 responses of 500 or above, no SQL in any body)
+  -> spec-reviewer **APPROVE**.
+
+**Process note:** `78ea4a9` (materials.list) and `4dff266` (plants.list) were committed by the human
+before spec review; plants.list was committed while its QA was still running. The int4 bug was therefore in committed code. It was fixed
+in the working tree, and history was not rewritten.
+
+**Open / deferred:**
+- Mask INTERNAL_SERVER_ERROR messages and stacks in a tRPC errorFormatter (recommended; not yet decided).
+- Browser click-through (sorting, paging, Back/Forward, visual layout, error state with the API stopped).
+- README notes: the cost of the 3 extra indexes; the B-tree row-size limit on `description`; `Vary` overwritten by tRPC;
+  stack traces outside production; 431 on very long URLs.
+- An unknown process holds port 5173 (PID 76134).
+
+**What the human corrected:** they chose strict phase order instead of combining Phase 3 with R3, and option A for the sort indexes.
+
+---
+
+## Search box (R3.1–R3.3, search part of R6.4), 2026-11-13
+
+**Plan:** this was front-end only; R3.1/R3.2 were already done in the API. Chain: frontend-engineer -> qa-tester -> spec-reviewer.
+Scope: the `MaterialFilters` component with the search box only. The R4 MultiSelects and Clear all were deferred.
+
+**What each agent did**
+- **frontend-engineer:** wrote `material-filters.tsx`, which is presentational: a "Search" label and description, an icon,
+  `maxLength 100`, and a clear button with an aria-label. In `routes/materials.tsx` it added the local `searchText`,
+  `useDebouncedValue(trim, 300)`, a push effect that writes the URL with `replace: true`, a sync effect for URL changes
+  made elsewhere (Back/Forward, a pasted link), and a clear handler that writes the URL immediately.
+- **qa-tester:** **FAIL**. Once the box had settled, Back/Forward was reverted. The push effect had `state.search` in its
+  dependencies, so a URL change made elsewhere re-ran it while `searchText` still held the newer value.
+  **The guard that caused this was suggested in the main thread's brief, so the mistake was the main thread's, not the engineer's.**
+- **frontend-engineer:** narrowed the push effect's dependencies to `[debouncedSearch]` and kept the
+  `=== searchText.trim()` check. That check guards a real race: the debounce timer and the Back re-sync can land in the same render.
+- **qa-tester:** **PASS**, based on hand traces of 13 scenarios checked against the React 19 and Mantine 9.8.0 source.
+  Low-severity finding: in rare timing cases, the box and the URL can stay out of step until the next edit.
+- **spec-reviewer:** **APPROVE**, nothing blocking. It recommended the optional one-token fix
+  `[debouncedSearch, searchText]` together with comment updates.
+
+**Open:** the human decides on the optional deps change. Browser checks are still to do: request count for a 7-letter
+word, real Back/Forward, focus after clear, layout. Minor items: the clear button also shows when the box holds only spaces.
+
+**What the human corrected:** nothing in this feature so far.
