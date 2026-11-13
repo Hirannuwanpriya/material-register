@@ -154,3 +154,30 @@ Scope: the `MaterialFilters` component with the search box only. The R4 MultiSel
 word, real Back/Forward, focus after clear, layout. Minor items: the clear button also shows when the box holds only spaces.
 
 **What the human corrected:** nothing in this feature so far.
+
+---
+
+## Filters (R4.1–R4.3, filter part of R6.4), 2026-11-13
+
+**Plan:** front-end only. The API's AND/OR logic and `plants.list` were already approved. Chain: frontend-engineer -> qa-tester -> spec-reviewer.
+
+**What each agent did**
+- **frontend-engineer:** added Type, Status and Plant MultiSelects to `MaterialFilters`.
+  - Plant labels read `1000 · Brisbane`.
+  - Plant ids are strings only inside the component, because Mantine option values are strings.
+  - A fallback "Plant <id>" pill shows for an id that has no option.
+  - Added `plants.list` with a 1-hour staleTime. The Plant select is disabled while plants load or after a load error.
+  - Filter changes are history pushes that reset to page 1.
+  - Clear all is a single push that keeps sort and direction. It also calls `setSearchText("")` directly, so a search that has not been debounced yet cannot write itself back. The main thread's brief flagged this trap in advance.
+  - Did not touch the search effects.
+- **qa-tester:** **PASS**.
+  - Totals match psql: OR 9249, AND 1895, planner 88, combined with sort 65, `plant=999` gives 0.
+  - All 7 Clear all traces pass, and batching is confirmed.
+  - Minor findings: F1, Clear all can push an identical URL (one extra Back); F2, a comment is inaccurate.
+- **spec-reviewer:** **APPROVE**, nothing blocking. It recommends the one-line F1 fix (only `update` when `hasActiveFilters`)
+  and a reworded F2 comment. Optional: reuse `isOneOf` and `parsePositiveInt` from table-state; rename `plantsError` to `plantsFailed`.
+
+**Open:** the F1/F2 polish; the search deps tweak; browser checks for the layout and pill wrap, the plant label flash, and the
+loading/disabled state; masking internal errors.
+
+**What the human corrected:** nothing in this feature.

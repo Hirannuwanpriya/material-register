@@ -10,6 +10,7 @@ import { MaterialsTable } from "../components/materials-table";
 import { formatNumber } from "../lib/format";
 import { useTRPC, type RouterOutputs } from "../lib/trpc";
 import {
+  hasActiveFilters,
   parseTableState,
   toQueryInput,
   toSearchParams,
@@ -63,6 +64,24 @@ export default function MaterialsPage() {
     if (state.search !== "") update({ search: "" }, { replace: true });
   };
 
+  // One push (not replace), so Back restores the filters. Sort and direction are kept; page resets to 1.
+  // setSearchText("") is needed even though the sync effect exists: if the URL search is already ""
+  // while the box holds undebounced text, state.search does not change, the sync effect never runs,
+  // and the pending debounce would later write that text back to the URL.
+  const clearAll = () => {
+    setSearchText("");
+    update({ search: "", types: [], statuses: [], plantIds: [] });
+  };
+
+  // Text typed but not yet debounced counts too, so Clear all is usable straight away.
+  const filtersActive = hasActiveFilters(state) || searchText.trim() !== "";
+
+  // Plants rarely change, so cache them for an hour instead of the global 30s; a reload still
+  // fetches fresh. The materials query does not wait for this, so the table works even if it fails.
+  const plantsQuery = useQuery(
+    trpc.plants.list.queryOptions(undefined, { staleTime: 60 * 60 * 1000 }),
+  );
+
   // staleTime (30s) is set globally on the QueryClient in root.tsx.
   // keepPreviousData keeps the old page on screen while the next one loads, so the table never flashes.
   const { data, isPending, isError, isFetching, isPlaceholderData, error } = useQuery(
@@ -92,6 +111,17 @@ export default function MaterialsPage() {
           search={searchText}
           onSearchChange={setSearchText}
           onSearchClear={clearSearch}
+          types={state.types}
+          onTypesChange={(types) => update({ types })}
+          statuses={state.statuses}
+          onStatusesChange={(statuses) => update({ statuses })}
+          plants={plantsQuery.data ?? []}
+          plantsLoading={plantsQuery.isPending}
+          plantsError={plantsQuery.isError}
+          plantIds={state.plantIds}
+          onPlantIdsChange={(plantIds) => update({ plantIds })}
+          filtersActive={filtersActive}
+          onClearAll={clearAll}
         />
 
         {/* Minimal for now; the full error and empty states are Phase 5 (R6.1 to R6.3). */}
