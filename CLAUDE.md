@@ -138,6 +138,9 @@ Every decision in this repo should make one of these rows stronger.
 | Icons | `@tabler/icons-react` |
 | Data fetching | TanStack Query v5 via `@trpc/tanstack-react-query` |
 | Seed data | `@faker-js/faker` with a fixed seed |
+| Small extras (approved in Phase 0) | `cors` (API CORS, Section 11); `isbot` + `@react-router/node` (required by React Router 7's default SPA entry) |
+
+Env files are loaded with Node's built-in `--env-file` / `process.loadEnvFile()`, not `dotenv`.
 
 ### Package Versions (pin these)
 

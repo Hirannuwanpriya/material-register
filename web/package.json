@@ -1,0 +1,38 @@
+{
+  "name": "material-register-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "react-router dev",
+    "build": "react-router build",
+    "typecheck": "react-router typegen && tsc"
+  },
+  "dependencies": {
+    "@mantine/core": "^9.8.0",
+    "@mantine/hooks": "^9.8.0",
+    "@react-router/node": "^7.18.5",
+    "@tabler/icons-react": "^3.51.0",
+    "@tanstack/react-query": "^5.107.1",
+    "@trpc/client": "^11.28.0",
+    "@trpc/tanstack-react-query": "^11.28.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router": "^7.18.5",
+    "isbot": "^5"
+  },
+  "devDependencies": {
+    "@react-router/dev": "^7.18.5",
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "postcss": "^8.5.32",
+    "postcss-preset-mantine": "^1.18.0",
+    "postcss-simple-vars": "^7.0.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.8"
+  }
+}

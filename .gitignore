@@ -1,1 +1,19 @@
- .DS_Store
+# OS
+.DS_Store
+
+# Local notes (kept out of Git by the human's choice)
+SCHEMA.md
+
+# Env files: only .env.sample templates are committed
+.env
+.env.*
+!.env.sample
+
+# Dependencies and build output
+node_modules/
+build/
+dist/
+.react-router/
+
+# Logs
+*.log

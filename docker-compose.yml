@@ -1,22 +1,22 @@
 services:
   db:
     image: postgres:17
-    container_name: material-register-db
+    container_name: material-register-agents-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: materials
       POSTGRES_PASSWORD: materials
       POSTGRES_DB: material_register
+    # Host port 5433 so this can run next to another Postgres already on 5432.
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata_agents:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U materials -d material_register" ]
-      interval: 1m30s
-      timeout: 30s
-      retries: 5
-      start_period: 30s
+      test: ["CMD-SHELL", "pg_isready -U materials -d material_register"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
 volumes:
-  pgdata:
+  pgdata_agents:
