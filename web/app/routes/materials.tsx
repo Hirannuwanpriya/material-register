@@ -7,6 +7,7 @@ import { useDebouncedValue } from "@mantine/hooks";
 import type { Route } from "./+types/materials";
 import { MaterialFilters } from "../components/material-filters";
 import { MaterialsTable } from "../components/materials-table";
+import { TableEmpty, TableError } from "../components/table-states";
 import { formatNumber } from "../lib/format";
 import { useTRPC, type RouterOutputs } from "../lib/trpc";
 import {
@@ -84,9 +85,21 @@ export default function MaterialsPage() {
 
   // staleTime (30s) is set globally on the QueryClient in root.tsx.
   // keepPreviousData keeps the old page on screen while the next one loads, so the table never flashes.
-  const { data, isPending, isError, isFetching, isPlaceholderData, error } = useQuery(
+  const { data, isPending, isError, isFetching, isPlaceholderData, error, refetch } = useQuery(
     trpc.materials.list.queryOptions(toQueryInput(state), { placeholderData: keepPreviousData }),
   );
+
+  // Placeholder data belongs to the previous query. If that one was empty, showing the empty
+  // state again would claim the new query has no rows before it has answered, so only real
+  // data can be "empty"; while the new query loads, the table shows skeleton rows instead.
+  const showEmpty = data?.total === 0 && !isPlaceholderData;
+  const placeholderEmpty = isPlaceholderData && data?.items.length === 0;
+
+  // error.data is only set when the server answered. Without it the request never got a reply
+  // (API down, network lost) and the browser's text ("Failed to fetch") means little to a user.
+  const errorMessage = error
+    ? (error.data ? error.message : "Could not reach the server. Check your connection and try again.")
+    : "";
 
   // A shared link may point past the last page (e.g. ?page=9999). Only act on real data for
   // this exact input, not placeholder data from the previous query, and replace the history
@@ -124,11 +137,14 @@ export default function MaterialsPage() {
           onClearAll={clearAll}
         />
 
-        {/* Minimal for now; the full error and empty states are Phase 5 (R6.1 to R6.3). */}
+        {/* Order matters (CLAUDE.md Section 8): error, then empty, then table. With keepPreviousData,
+            a failed new query has no placeholder, so data is undefined and the Alert shows. */}
         {isError && !data ? (
-          <Text c="red">Could not load materials: {error.message}</Text>
-        ) : data?.total === 0 ? (
-          <Text c="dimmed">No materials match.</Text>
+          <TableError message={errorMessage} retrying={isFetching} onRetry={() => refetch()} />
+        ) : showEmpty ? (
+          <Paper withBorder radius="md">
+            <TableEmpty filtersActive={filtersActive} onClear={clearAll} />
+          </Paper>
         ) : (
           <>
             <Paper withBorder radius="md">
@@ -137,7 +153,7 @@ export default function MaterialsPage() {
                 sortBy={state.sortBy}
                 sortDir={state.sortDir}
                 onSort={(sortBy, sortDir) => update({ sortBy, sortDir })}
-                loading={isPending}
+                loading={isPending || placeholderEmpty}
                 refetching={isPlaceholderData}
               />
             </Paper>
@@ -145,15 +161,22 @@ export default function MaterialsPage() {
             <Group justify="space-between">
               <Group gap="xs">
                 <Text size="sm" c="dimmed">
-                  {data ? resultRange(data) : "Loading materials..."}
+                  {data && !placeholderEmpty ? resultRange(data) : "Loading materials..."}
                 </Text>
                 {isFetching && !isPending && <Loader size="xs" />}
+                {/* A background refetch of the same query failed: the rows are still valid, just
+                    possibly out of date, so a quiet note is enough instead of hiding them. */}
+                {isError && data && (
+                  <Text size="sm" c="red">
+                    Could not refresh. Showing the last loaded results.
+                  </Text>
+                )}
               </Group>
               <Pagination
                 total={data?.pageCount ?? 1}
                 value={state.page}
                 onChange={(page) => update({ page })}
-                disabled={!data}
+                disabled={!data || placeholderEmpty}
               />
             </Group>
           </>

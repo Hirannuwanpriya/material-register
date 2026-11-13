@@ -181,3 +181,27 @@ word, real Back/Forward, focus after clear, layout. Minor items: the clear butto
 loading/disabled state; masking internal errors.
 
 **What the human corrected:** nothing in this feature.
+
+---
+
+## R5.2 / Section 11: tRPC error formatter, 2026-11-13
+
+**Plan:** the human asked for "R5" via backend-engineer. The main thread noted that R5.1–R5.3 were already built and approved,
+and asked what to do. The remaining gap was R5.2's "clear message": Zod errors came back as a stringified JSON array,
+and 500s leaked SQL and a stack trace. The human chose **Error formatter**. Chain: backend-engineer -> qa-tester -> spec-reviewer.
+
+**What each agent did**
+- **backend-engineer:** added `errorFormatter` in `api/src/trpc.ts`.
+  - Zod BAD_REQUEST errors get a readable message, e.g. `pageSize: Too big: expected number to be <=100`, plus `data.issues` with a path and message for each problem.
+  - 500s get "Something went wrong. Please try again."
+  - `stack` is dropped everywhere.
+  - The response format and HTTP statuses are unchanged.
+  - It checked tRPC 11.28's parser to confirm the error cause is a real `ZodError` with Zod v4.
+  - To test a 500, it used a scratch instance with a bad DB URL instead of stopping Postgres, because the shared API had restarted during its run and another agent might be using it.
+- **qa-tester:** **PASS**. 18 readable 400s, and 0 leaks across 24 response bodies. Observation: a future `.output()` validator could
+  leak internal field paths through `issues` on a 500.
+- **spec-reviewer:** **APPROVE**. It recommended gating `issues` on BAD_REQUEST and correcting a comment, since `onError` only logs 500s.
+- **backend-engineer:** applied both -> qa-tester **PASS**. QA proved the guard live with a scratch router that has a failing
+  `.output()`: the response was a 500 with the generic message and `issues:null` -> spec-reviewer **APPROVE**.
+
+**What the human corrected:** they picked the scope (error formatter) after the main thread pointed out that R5 was already met.
